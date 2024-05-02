@@ -6,11 +6,25 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include <stddef.h>
 
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
+
+struct queue {
+    struct proc* head;
+    struct proc* tail;
+};
+
+struct {
+  struct queue first_queue;
+  struct queue second_queue;
+  struct queue third_queue;
+  struct queue fourth_queue;
+
+} pqueues;
 
 static struct proc *initproc;
 
@@ -19,6 +33,67 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+
+void 
+queues_init(void) {
+  pqueues.first_queue.head = NULL; 
+  pqueues.first_queue.tail = NULL;
+
+  pqueues.second_queue.head = NULL; 
+  pqueues.second_queue.tail = NULL;
+
+  pqueues.third_queue.head = NULL; 
+  pqueues.third_queue.tail = NULL;
+
+  pqueues.fourth_queue.head = NULL; 
+  pqueues.fourth_queue.tail = NULL;
+}
+
+void
+enqueue_process(struct proc* p, struct queue* q) {
+    if (q->tail == NULL) {
+        q->head = p;
+        q->tail = p;
+    } else {
+        q->tail->next = p;
+        q->tail = p;
+    }
+    p->next = NULL;
+}
+
+struct proc* 
+dequeue_process(struct queue* q) {
+    if (q->head == NULL) {
+        return NULL;
+    }
+    struct proc* p = q->head;
+    q->head = q->head->next;
+    if (q->head == NULL) {
+        q->tail = NULL;
+    }
+    return p;
+}
+
+int isEmpty(struct queue* q) {
+    if(q->head == NULL){
+      return 1;
+    }else{
+      return 0;
+    }
+}
+
+void 
+ticking(){
+	for(struct proc *p=ptable.proc; p<&ptable.proc[NPROC]; ++p){
+		if(p->state == RUNNING){
+			p->rtime++;
+      p->cputicks--;
+		}
+    if(p->state == SLEEPING){
+			p->iotime++;
+		}
+	}
+}
 
 void
 pinit(void)
@@ -111,6 +186,10 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  p->ctime = ticks;
+  p->rtime = 0;
+  p->cputicks = INTERV;
+  p->priority = 2;
 
   return p;
 }
@@ -263,6 +342,7 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+  curproc->etime = ticks;
   sched();
   panic("zombie exit");
 }
@@ -332,25 +412,59 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+
+    queues_init();
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
 
+      switch(p->priority){
+        case 1:
+          enqueue_process(p, &pqueues.first_queue);
+          break;
+        case 2:
+          enqueue_process(p, &pqueues.second_queue);
+          break;
+        case 3:
+          enqueue_process(p, &pqueues.third_queue);
+          break;
+        case 4:
+          enqueue_process(p, &pqueues.fourth_queue);
+          break;
+      }
+    }
+
+    while(!isEmpty(&pqueues.first_queue) || !isEmpty(&pqueues.second_queue) || !isEmpty(&pqueues.third_queue) || !isEmpty(&pqueues.fourth_queue)){
+      if (!isEmpty(&pqueues.fourth_queue)) {
+        p = dequeue_process(&pqueues.fourth_queue);
+      } else if (!isEmpty(&pqueues.third_queue)) {
+        p = dequeue_process(&pqueues.third_queue);
+      } else if (!isEmpty(&pqueues.second_queue)) {
+        p = dequeue_process(&pqueues.second_queue);
+      } else if (!isEmpty(&pqueues.first_queue)) {
+        p = dequeue_process(&pqueues.first_queue);
+      } else {
+        p = 0;
+      }
+
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      if (p != 0){
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+  }
+
+  release(&ptable.lock);
 
   }
 }
@@ -385,16 +499,11 @@ sched(void)
 void
 yield(void)
 {
-  int clock_time = INTERV;
-
-  clock_time--;
-
-  if(!clock_time){
-    acquire(&ptable.lock);  //DOC: yieldlock
-    myproc()->state = RUNNABLE;
-    sched();
-    release(&ptable.lock);
-  }
+  acquire(&ptable.lock);  //DOC: yieldlock
+  myproc()->state = RUNNABLE;
+  myproc()->cputicks = INTERV;
+  sched();
+  release(&ptable.lock);
 }
 
 // A fork child's very first scheduling by scheduler()
