@@ -385,10 +385,16 @@ sched(void)
 void
 yield(void)
 {
-  acquire(&ptable.lock);  //DOC: yieldlock
-  myproc()->state = RUNNABLE;
-  sched();
-  release(&ptable.lock);
+  int clock_time = INTERV;
+
+  clock_time--;
+
+  if(!clock_time){
+    acquire(&ptable.lock);  //DOC: yieldlock
+    myproc()->state = RUNNABLE;
+    sched();
+    release(&ptable.lock);
+  }
 }
 
 // A fork child's very first scheduling by scheduler()
