@@ -34,6 +34,133 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+
+struct proc *
+get_sjf_job(struct queue *q) {
+    if (q->head == NULL) {
+        return NULL;
+    }
+
+    struct proc *p = q->head;
+    struct proc *prev = NULL;
+    struct proc *shortest_job = p;
+
+    while (p != NULL) {
+        if (p->exec_time < shortest_job->exec_time) {
+            shortest_job = p;
+        }
+        p = p->next;
+    }
+
+    p = q->head;
+    while (p != NULL) {
+        if (p == shortest_job) {
+            if (prev == NULL) {
+                q->head = p->next;
+            } else {
+                prev->next = p->next;
+            }
+            if (p == q->tail) {
+                q->tail = prev;
+            }
+            break;
+        }
+        prev = p;
+        p = p->next;
+    }
+
+    return shortest_job;
+}
+
+int 
+random() {
+    static int seed = 0;
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed % 201;
+}
+
+int
+total_tickets(void) {
+
+	struct proc *p;
+	int total = 0;
+	for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+		if (p->state == RUNNABLE) {
+			total += p->tickets;
+		}
+	}
+
+	return total;
+}
+
+
+int lottery_pick(int total) {
+    return random() % total;
+}
+
+struct proc *get_lottery_job(struct queue *q) {
+    if (q->head == NULL) {
+        return NULL;
+    }
+
+    int total = total_tickets();
+    int winning_ticket = lottery_pick(total);
+
+    int current_tickets = 0;
+    struct proc *p = q->head;
+    struct proc *prev = NULL;
+    while (p != NULL) {
+        current_tickets += p->tickets;
+        if (current_tickets > winning_ticket) {
+            if (prev == NULL) {
+                q->head = p->next;
+            } else {
+                prev->next = p->next;
+            }
+            if (p == q->tail) {
+                q->tail = prev;
+            }
+            return p;
+        }
+        prev = p;
+        p = p->next;
+    }
+
+    return NULL;
+}
+
+struct proc* 
+get_fcfs_job(struct queue* q) {
+    if (q->head == NULL) {
+        return NULL;
+    }
+
+    struct proc* p = q->head;
+    struct proc* prev = NULL;
+    struct proc* minProc = p;
+
+    while (p != NULL) {
+        if (p->ctime <= minProc->ctime) {
+            minProc = p;
+            if (prev == NULL) {
+                q->head = p->next;
+            } else {
+                prev->next = p->next;
+            }
+            break;
+        }
+        prev = p;
+        p = p->next;
+    }
+
+    if (q->head == NULL) {
+        q->tail = NULL;
+    }
+
+    return minProc;
+}
+
+
 void 
 queues_init(void) {
   pqueues.first_queue.head = NULL; 
@@ -63,6 +190,19 @@ enqueue_process(struct proc* p, struct queue* q) {
 
 struct proc* 
 dequeue_process(struct queue* q) {
+    if (q->head == NULL) {
+        return NULL;
+    }
+    struct proc* p = q->head;
+    q->head = q->head->next;
+    if (q->head == NULL) {
+        q->tail = NULL;
+    }
+    return p;
+}
+
+struct proc* 
+get_round_robin_job(struct queue* q) {
     if (q->head == NULL) {
         return NULL;
     }
@@ -190,6 +330,8 @@ found:
   p->rtime = 0;
   p->cputicks = INTERV;
   p->priority = 2;
+  p->tickets = 8;
+  p->exec_time = random() % 31;
 
   return p;
 }
@@ -436,13 +578,13 @@ scheduler(void)
 
     while(!isEmpty(&pqueues.first_queue) || !isEmpty(&pqueues.second_queue) || !isEmpty(&pqueues.third_queue) || !isEmpty(&pqueues.fourth_queue)){
       if (!isEmpty(&pqueues.fourth_queue)) {
-        p = dequeue_process(&pqueues.fourth_queue);
+        p = get_fcfs_job(&pqueues.fourth_queue);
       } else if (!isEmpty(&pqueues.third_queue)) {
-        p = dequeue_process(&pqueues.third_queue);
+        p = get_lottery_job(&pqueues.third_queue);
       } else if (!isEmpty(&pqueues.second_queue)) {
-        p = dequeue_process(&pqueues.second_queue);
+        p = get_round_robin_job(&pqueues.second_queue);
       } else if (!isEmpty(&pqueues.first_queue)) {
-        p = dequeue_process(&pqueues.first_queue);
+        p = get_sjf_job(&pqueues.first_queue);
       } else {
         p = 0;
       }

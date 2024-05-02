@@ -54,8 +54,10 @@ struct proc {
   int ctime;                   // creation time
   int etime;                   // end time
   int cputicks;                // ticks to preemption
-  int priority;                 // process priority
+  int priority;                // process priority
   struct proc* next;           // Pointer to the next process on the queue 
+  int tickets;                 // Process tickets to Lottery Algorithm
+  int exec_time;                // Process execution time
 };
 
 // Process memory is laid out contiguously, low addresses first:
