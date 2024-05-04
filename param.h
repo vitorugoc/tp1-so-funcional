@@ -11,5 +11,7 @@
 #define LOGSIZE      (MAXOPBLOCKS*3)  // max data blocks in on-disk log
 #define NBUF         (MAXOPBLOCKS*3)  // size of disk block cache
 #define FSSIZE       1000  // size of file system in block
-#define INTERV       5     // interval of n ticks since preemptions
+#define INTERV       10     // interval of n ticks since preemptions
 #define TIMESLICE    10    // Round Robin Algorithm Time Slice
+#define PROMOTION_TIME_1 200
+#define PROMOTION_TIME_2 400

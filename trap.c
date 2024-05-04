@@ -51,9 +51,9 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
+      ticking();
       wakeup(&ticks);
       release(&tickslock);
-      ticking();
     }
     lapiceoi();
     break;
@@ -105,9 +105,7 @@ trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER){
-        if(myproc()->cputicks == 0 && myproc()->priority != 2)
-          yield();
-        if(myproc()->priority == 2 && myproc()->cputicks + TIMESLICE == 0)
+        if(myproc()->cputicks == 0)
           yield();
      }
 

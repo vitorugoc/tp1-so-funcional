@@ -23,6 +23,9 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int change_prio(int);
+int yield(void);
+int wait2(int*, int*, int*);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -37,3 +40,4 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+

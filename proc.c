@@ -34,6 +34,37 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+int 
+change_prio(int priority) {
+
+    acquire(&ptable.lock);
+    if (priority < 1 || priority > 4)
+        return -1;
+    myproc()->priority = priority;
+    release(&ptable.lock);
+    return 0;
+}
+
+void promote_processes() {
+    struct proc *p;
+
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->state == RUNNABLE) {
+            p->wait_ticks++;
+            if (p->wait_ticks >= PROMOTION_TIME_2) {
+                if (p->priority == 3) {
+                    p->priority = 4;
+                    p->wait_ticks = 0;
+                }
+            } else if (p->wait_ticks >= PROMOTION_TIME_1) {
+                if (p->priority == 2) {
+                    p->priority = 3;
+                    p->wait_ticks = 0;
+                }
+            }
+        }
+    }
+}
 
 struct proc *
 get_sjf_job(struct queue *q) {
@@ -230,8 +261,11 @@ ticking(){
       p->cputicks--;
 		}
     if(p->state == SLEEPING){
-			p->iotime++;
+			p->stime++;
 		}
+    if(p->state == RUNNABLE){
+      p->retime++;
+    }
 	}
 }
 
@@ -332,6 +366,8 @@ found:
   p->priority = 2;
   p->tickets = 8;
   p->exec_time = random() % 31;
+  p->retime = 0;
+  p->stime = 0;
 
   return p;
 }
@@ -533,6 +569,86 @@ wait(void)
   }
 }
 
+int 
+wait2(int *retime, int *rutime, int *stime) {
+  struct proc *p;
+  int havekids, pid;
+  acquire(&ptable.lock);
+  for(;;){
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != myproc())
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        *retime = p->retime;
+        *rutime = p->rtime;
+        *stime = p->stime;
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->state = UNUSED;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->ctime = 0;
+        p->retime = 0;
+        p->rtime = 0;
+        p->stime = 0;
+        p->priority = 0;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    if(!havekids || myproc()->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    sleep(myproc(), &ptable.lock);
+  }
+}
+
+// void
+// scheduler(void)
+// {
+//   struct proc *p;
+//   struct cpu *c = mycpu();
+//   c->proc = 0;
+  
+//   for(;;){
+//     // Enable interrupts on this processor.
+//     sti();
+
+//     // Loop over process table looking for process to run.
+//     acquire(&ptable.lock);
+//     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+//       if(p->state != RUNNABLE)
+//         continue;
+
+//       // Switch to chosen process.  It is the process's job
+//       // to release ptable.lock and then reacquire it
+//       // before jumping back to us.
+//       c->proc = p;
+//       switchuvm(p);
+//       p->state = RUNNING;
+
+//       swtch(&(c->scheduler), p->context);
+//       switchkvm();
+
+//       // Process is done running for now.
+//       // It should have changed its p->state before coming back.
+//       c->proc = 0;
+//     }
+//     release(&ptable.lock);
+
+//   }
+// }
+
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -551,7 +667,8 @@ scheduler(void)
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
+    // Enable processes promotion
+    promote_processes();
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 

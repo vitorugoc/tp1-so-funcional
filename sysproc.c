@@ -89,3 +89,30 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_change_prio(void)
+{
+  int priority;
+  if(argint(0, &priority) < 0)
+    return -1;
+  return change_prio(priority);
+}
+
+int 
+sys_wait2(void) {
+  int *retime, *rutime, *stime;
+  if (argptr(0, (void*)&retime, sizeof(retime)) < 0)
+    return -1;
+  if (argptr(1, (void*)&rutime, sizeof(retime)) < 0)
+    return -1;
+  if (argptr(2, (void*)&stime, sizeof(stime)) < 0)
+    return -1;
+  return wait2(retime, rutime, stime);
+}
+
+int 
+sys_yield(void) {
+  yield();
+  return 0;
+}
