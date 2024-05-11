@@ -15,3 +15,4 @@
 #define TIMESLICE    10    // Round Robin Algorithm Time Slice
 #define PROMOTION_TIME_1 200
 #define PROMOTION_TIME_2 400
+#define PROMOTION_TIME_3 600

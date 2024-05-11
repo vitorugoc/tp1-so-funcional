@@ -47,15 +47,20 @@ change_prio(int priority) {
 
 void promote_processes(struct proc *p) {
   if (p->wait_ticks >= PROMOTION_TIME_2) {
-      if (p->priority == 3) {
-          p->priority = 4;
-          p->wait_ticks = 0;
-      }
-  } else if (p->wait_ticks >= PROMOTION_TIME_1) {
       if (p->priority == 2) {
           p->priority = 3;
           p->wait_ticks = 0;
       }
+  } else if (p->wait_ticks >= PROMOTION_TIME_1) {
+      if (p->priority == 1) {
+          p->priority = 2;
+          p->wait_ticks = 0;
+      }
+  }else if(p->wait_ticks >= PROMOTION_TIME_3){
+    if(p->priority == 3){
+      p->priority = 4;
+      p->wait_ticks = 0;
+    }
   }
 }
 

@@ -7,7 +7,7 @@ int ready_time = 0;
 int turnaround_time = 0;
 int process_type = -1;
 
-#define NUM_PROCESSES 100
+#define NUM_PROCESSES 60
 #define NUM_PRIORITIES 4
 
 int
