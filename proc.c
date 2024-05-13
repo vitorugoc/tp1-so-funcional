@@ -612,51 +612,6 @@ wait2(int *retime, int *rutime, int *stime) {
   }
 }
 
-void
-scheduler(void)
-{
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
-  
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
-
-  }
-}
-
-
-// PAGEBREAK: 42
-// Per-CPU process scheduler.
-// Each CPU calls scheduler() after setting itself up.
-// Scheduler never returns.  It loops, doing:
-//  - choose a process to run
-//  - swtch to start running that process
-//  - eventually that process transfers control
-//      via swtch back to the scheduler.
 // void
 // scheduler(void)
 // {
@@ -670,62 +625,107 @@ scheduler(void)
 
 //     // Loop over process table looking for process to run.
 //     acquire(&ptable.lock);
-
-//     queues_init();
 //     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
 //       if(p->state != RUNNABLE)
 //         continue;
 
-//       switch(p->priority){
-//         case 1:
-//           enqueue_process(p, &pqueues.first_queue);
-//           break;
-//         case 2:
-//           enqueue_process(p, &pqueues.second_queue);
-//           break;
-//         case 3:
-//           enqueue_process(p, &pqueues.third_queue);
-//           break;
-//         case 4:
-//           enqueue_process(p, &pqueues.fourth_queue);
-//           break;
-//       }
-//     }
-
-//     while(!isEmpty(&pqueues.first_queue) || !isEmpty(&pqueues.second_queue) || !isEmpty(&pqueues.third_queue) || !isEmpty(&pqueues.fourth_queue)){
-//       if (!isEmpty(&pqueues.fourth_queue)) {
-//         p = get_fcfs_job(&pqueues.fourth_queue);
-//       } else if (!isEmpty(&pqueues.third_queue)) {
-//         p = get_lottery_job(&pqueues.third_queue);
-//       } else if (!isEmpty(&pqueues.second_queue)) {
-//         p = get_round_robin_job(&pqueues.second_queue);
-//       } else if (!isEmpty(&pqueues.first_queue)) {
-//         p = get_sjf_job(&pqueues.first_queue);
-//       } else {
-//         p = 0;
-//       }
-
 //       // Switch to chosen process.  It is the process's job
 //       // to release ptable.lock and then reacquire it
 //       // before jumping back to us.
-//       if (p != 0){
-//         c->proc = p;
-//         switchuvm(p);
-//         p->state = RUNNING;
+//       c->proc = p;
+//       switchuvm(p);
+//       p->state = RUNNING;
 
-//         swtch(&(c->scheduler), p->context);
-//         switchkvm();
+//       swtch(&(c->scheduler), p->context);
+//       switchkvm();
 
-//         // Process is done running for now.
-//         // It should have changed its p->state before coming back.
-//         c->proc = 0;
-//       }
-//   }
-
-//   release(&ptable.lock);
+//       // Process is done running for now.
+//       // It should have changed its p->state before coming back.
+//       c->proc = 0;
+//     }
+//     release(&ptable.lock);
 
 //   }
 // }
+
+
+// PAGEBREAK: 42
+// Per-CPU process scheduler.
+// Each CPU calls scheduler() after setting itself up.
+// Scheduler never returns.  It loops, doing:
+//  - choose a process to run
+//  - swtch to start running that process
+//  - eventually that process transfers control
+//      via swtch back to the scheduler.
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+
+    queues_init();
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      switch(p->priority){
+        case 1:
+          enqueue_process(p, &pqueues.first_queue);
+          break;
+        case 2:
+          enqueue_process(p, &pqueues.second_queue);
+          break;
+        case 3:
+          enqueue_process(p, &pqueues.third_queue);
+          break;
+        case 4:
+          enqueue_process(p, &pqueues.fourth_queue);
+          break;
+      }
+    }
+
+    while(!isEmpty(&pqueues.first_queue) || !isEmpty(&pqueues.second_queue) || !isEmpty(&pqueues.third_queue) || !isEmpty(&pqueues.fourth_queue)){
+      if (!isEmpty(&pqueues.fourth_queue)) {
+        p = get_fcfs_job(&pqueues.fourth_queue);
+      } else if (!isEmpty(&pqueues.third_queue)) {
+        p = get_lottery_job(&pqueues.third_queue);
+      } else if (!isEmpty(&pqueues.second_queue)) {
+        p = get_round_robin_job(&pqueues.second_queue);
+      } else if (!isEmpty(&pqueues.first_queue)) {
+        p = get_sjf_job(&pqueues.first_queue);
+      } else {
+        p = 0;
+      }
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      if (p != 0){
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+  }
+
+  release(&ptable.lock);
+
+  }
+}
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
